@@ -38,7 +38,7 @@ tf.app.flags.DEFINE_string('optimizer', 'A', 'the optimizer u wanna run')
 tf.app.flags.DEFINE_string('learning_rate', '0.01', 'the optimizer u wanna run')
 tf.app.flags.DEFINE_integer('max_steps', 16003, 'the max training steps ')
 tf.app.flags.DEFINE_integer('batch_size', 128, 'Validation batch size')
-tf.app.flags.DEFINE_integer('eval_steps', 10, "the step num to eval")
+tf.app.flags.DEFINE_integer('eval_steps', 100, "the step num to eval")
 tf.app.flags.DEFINE_integer('save_steps', 4000, "the steps to save")
 tf.app.flags.DEFINE_boolean('restore', False, 'whether to restore from checkpoint')
 tf.app.flags.DEFINE_integer('charset_size', 5210, "Choose the first `charset_size` characters only.")
@@ -332,8 +332,9 @@ def test(op = FLAGS.optimizer):
         for g, v in gv:
             if g is not None:
                 if 'weights' in v.name:
-                    grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
-                    sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
+
+                    tf.summary.histogram("{}/grad/hist".format(v.name), g)
+                    #sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
 
 
 
