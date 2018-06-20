@@ -33,13 +33,13 @@ ch.setLevel(logging.INFO)
 logger.addHandler(ch)
 
 
-tf.app.flags.DEFINE_string('graph', 'newcnn', 'the graph u wanna run')
+tf.app.flags.DEFINE_string('graph', 'OCR', 'the graph u wanna run')
 tf.app.flags.DEFINE_string('optimizer', 'A', 'the optimizer u wanna run')
-tf.app.flags.DEFINE_string('learning_rate', '0.001', 'the optimizer u wanna run')
+tf.app.flags.DEFINE_string('learning_rate', '0.01', 'the optimizer u wanna run')
 tf.app.flags.DEFINE_integer('max_steps', 16003, 'the max training steps ')
-tf.app.flags.DEFINE_integer('batch_size', 64, 'Validation batch size')
-tf.app.flags.DEFINE_integer('eval_steps', 50, "the step num to eval")
-tf.app.flags.DEFINE_integer('save_steps', 2000, "the steps to save")
+tf.app.flags.DEFINE_integer('batch_size', 128, 'Validation batch size')
+tf.app.flags.DEFINE_integer('eval_steps', 10, "the step num to eval")
+tf.app.flags.DEFINE_integer('save_steps', 4000, "the steps to save")
 tf.app.flags.DEFINE_boolean('restore', False, 'whether to restore from checkpoint')
 tf.app.flags.DEFINE_integer('charset_size', 5210, "Choose the first `charset_size` characters only.")
 tf.app.flags.DEFINE_string('dictionarydir', './dictionary.txt', 'dictioary dir"}')
@@ -149,8 +149,8 @@ def build_graph(top_k=1,op = FLAGS.optimizer):
     # max_pool2d->fully_connected->fully_connected
     #给slim.conv2d和slim.fully_connected准备了默认参数：batch_norm
     with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                        normalizer_fn=slim.batch_norm,
-                        normalizer_params={'is_training': is_training}):
+                        normalizer_fn=tf.layers.batch_normalization,
+                        normalizer_params={'training': is_training}):
         conv3_1 = slim.conv2d(images, 64, [3, 3], 1, padding='SAME', scope='conv3_1')
         max_pool_1 = slim.max_pool2d(conv3_1, [2, 2], [2, 2], padding='SAME', scope='pool1')
         conv3_2 = slim.conv2d(max_pool_1, 128, [3, 3], padding='SAME', scope='conv3_2')
@@ -171,15 +171,18 @@ def build_graph(top_k=1,op = FLAGS.optimizer):
     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=labels))
     accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(logits, 1), labels), tf.float32))
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    if update_ops:
 
-        updates = tf.group(*update_ops)
-        loss = control_flow_ops.with_dependencies([updates], loss)
     global_step = tf.get_variable("step", [], initializer=tf.constant_initializer(0.0), trainable=False)
+
+    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+
     optimizer = Gradient_dict[op](learning_rate=learn_rate)
 
-    train_op = slim.learning.create_train_op(loss, optimizer, global_step=global_step)
+    with tf.control_dependencies(update_ops):
+        train_op = optimizer.minimize(loss , global_step=global_step)
+
+
+    #train_op = slim.learning.create_train_op(loss, optimizer, global_step=global_step)
     probabilities = tf.nn.softmax(logits)
     predicition = tf.argmax(probabilities,1)
 
@@ -299,8 +302,8 @@ def test(op = FLAGS.optimizer):
     is_training = tf.placeholder(dtype=tf.bool, shape=[], name='is_training')
 
     with slim.arg_scope([slim.conv2d, slim.fully_connected],
-                        normalizer_fn=slim.batch_norm,
-                        normalizer_params={'is_training': is_training}):
+                        normalizer_fn=tf.layers.batch_normalization,
+                        normalizer_params={'training': is_training}):
         cov1 = slim.conv2d(images, 64, [3,3],scope= 'cov1')
         max1 = slim.max_pool2d(cov1, [2, 2], [2, 2], padding='SAME', scope='pool1')
         cov2 = slim.conv2d(max1, 128, [3, 3], scope='cov2')
@@ -317,13 +320,13 @@ def test(op = FLAGS.optimizer):
 
         loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=fc2, labels=labels))
         accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(fc2, 1), labels), tf.float32))
-
+        global_step = tf.get_variable("step", [], initializer=tf.constant_initializer(0.0), trainable=False)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         optimizer = Gradient_dict[op](learning_rate=learn_rate)
 
         with tf.control_dependencies(update_ops):
-            train_op = optimizer.minimize(loss)
+            train_op = optimizer.minimize(loss,global_step = global_step)
 
 
 
@@ -342,7 +345,8 @@ def test(op = FLAGS.optimizer):
                 'learning_rate':learn_rate,
                 'is_training':is_training,
                 'probabilities':probabilities,
-                'predicition':predicition}
+                'predicition':predicition,
+                'global_step': global_step}
 
 
 
@@ -355,11 +359,13 @@ def train():
     graph = graph_dict[FLAGS.graph][0]()
 
     train_feeder = DataIterator(data_dir='./dataset/train/', size = graph_dict[FLAGS.graph][1])
-    test_feeder = DataIterator(data_dir='./dataset/test/', size = graph_dict[FLAGS.graph][1])
+    test_feeder1 = DataIterator(data_dir='./dataset/train/', size = graph_dict[FLAGS.graph][1])
+    test_feeder2 = DataIterator(data_dir='./dataset/test/', size=graph_dict[FLAGS.graph][1])
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
 
         train_images, train_labels = train_feeder.input_pipeline(batch_size=FLAGS.batch_size, aug=True)
-        test_images, test_labels = test_feeder.input_pipeline(batch_size=FLAGS.batch_size)
+        test_images1, test_labels1 = test_feeder1.input_pipeline(batch_size=FLAGS.batch_size)
+        test_images2, test_labels2 = test_feeder2.input_pipeline(batch_size=FLAGS.batch_size)
 
         var_list = tf.trainable_variables()
         g_list = tf.global_variables()
@@ -368,7 +374,7 @@ def train():
         var_list += bn_moving_vars
 
         #saver = tf.train.Saver(var_list=var_list, max_to_keep = 1)
-        saver = tf.train.Saver(max_to_keep = 1)
+        saver = tf.train.Saver(max_to_keep = 5)
         sess.run(tf.global_variables_initializer())
 
         coord = tf.train.Coordinator()
@@ -389,7 +395,7 @@ def train():
 
 
 
-        summary_dir_test = FLAGS.log_dir + '/val/' + FLAGS.graph + '_' + FLAGS.optimizer + '_' + str(FLAGS.learning_rate)
+        summary_dir_test = FLAGS.log_dir + '/val/' + FLAGS.graph + '_' + FLAGS.optimizer + '_' + str(FLAGS.learning_rate)+'train'
         if FLAGS.restore == False:
             try:
                 shutil.rmtree(summary_dir_test)
@@ -397,9 +403,17 @@ def train():
                 pass
             finally:
                 os.mkdir(summary_dir_test)
-        test_writer = tf.summary.FileWriter(summary_dir_test)
+        test_writer1 = tf.summary.FileWriter(summary_dir_test)
 
-
+        summary_dir_test = FLAGS.log_dir + '/val/' + FLAGS.graph + '_' + FLAGS.optimizer + '_' + str(FLAGS.learning_rate)+'test'
+        if FLAGS.restore == False:
+            try:
+                shutil.rmtree(summary_dir_test)
+            except Exception:
+                pass
+            finally:
+                os.mkdir(summary_dir_test)
+        test_writer2 = tf.summary.FileWriter(summary_dir_test)
 
 
 
@@ -435,22 +449,23 @@ def train():
                             graph['learning_rate']: float(FLAGS.learning_rate),
                             graph['is_training']: True}
 
-                _, loss, summary  = sess.run([graph['train_step'],
+                _, loss, summary, step  = sess.run([graph['train_step'],
                                     graph['loss'],
-                                    graph['merged_summary_op']],
+                                    graph['merged_summary_op'],
+                                    graph['global_step']],
                                     feed_dict=feed_dict)
 
-                train_writer.add_summary(summary, i)
+                train_writer.add_summary(summary, step)
                 end_time = time.time()
                 logger.info(
                     "the step {0} takes {1} loss {2} ".format(i, end_time - start_time, loss))
-                if i % FLAGS.save_steps == 0:
+                if step % FLAGS.save_steps == 0:
                     logger.info('Save the ckpt of {0}'.format(i))
                     if not os.path.exists(ckpt_dir):
                         os.mkdir(ckpt_dir)
                     saver.save(sess, os.path.join(ckpt_dir, 'C'), global_step = i)
-                if i % FLAGS.eval_steps == 0:
-                    test_images_batch, test_labels_batch = sess.run([test_images, test_labels])
+                if step % FLAGS.eval_steps == 0:
+                    test_images_batch, test_labels_batch = sess.run([test_images1, test_labels1])
 
                     feed_dict = {graph['images']: test_images_batch,
                                  graph['labels']: test_labels_batch,
@@ -458,7 +473,16 @@ def train():
                     accuracy, summary = sess.run([graph['accuracy'],
                                             graph['merged_summary_op']],
                                             feed_dict = feed_dict)
-                    test_writer.add_summary(summary, i)
+                    test_writer1.add_summary(summary, step)
+                    test_images_batch, test_labels_batch = sess.run([test_images2, test_labels2])
+
+                    feed_dict = {graph['images']: test_images_batch,
+                                 graph['labels']: test_labels_batch,
+                                 graph['is_training']: False}
+                    accuracy, summary = sess.run([graph['accuracy'],
+                                                  graph['merged_summary_op']],
+                                                 feed_dict=feed_dict)
+                    test_writer2.add_summary(summary, step)
                     logger.info("---------val accuracy {0} ".format(accuracy))
         except tf.errors.OutOfRangeError:
             logger.info('==================Train Finished================')
@@ -479,7 +503,7 @@ def validation():
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
         test_images, test_labels = test_feeder.input_pipeline(batch_size=FLAGS.batch_size, num_epochs=1)
 
-        saver = tf.train.Saver()
+        saver = tf.train.Saver(max_to_keep = 5)
 
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
@@ -502,6 +526,9 @@ def validation():
         ckpt_dir = FLAGS.checkpoint_dir + FLAGS.graph + '_' + FLAGS.optimizer + '_' + str(FLAGS.learning_rate)
         ckpt = tf.train.latest_checkpoint(ckpt_dir)
         if ckpt:
+            print(ckpt)
+            print(type(ckpt))
+            #ckpt = './checkpoint/testing_A_0.001/C-10000'
             saver.restore(sess, ckpt)
             print("restore from the checkpoint {0}".format(ckpt))
 
