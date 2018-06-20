@@ -324,9 +324,19 @@ def test(op = FLAGS.optimizer):
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         optimizer = Gradient_dict[op](learning_rate=learn_rate)
-
+        gv = optimizer.compute_gradients(loss)
         with tf.control_dependencies(update_ops):
-            train_op = optimizer.minimize(loss,global_step = global_step)
+            train_op = optimizer.apply_gradients(gv,global_step = global_step)
+
+
+        for g, v in gv:
+            if g is not None:
+                if 'weights' in v.name:
+                    grad_hist_summary = tf.summary.histogram("{}/grad/hist".format(v.name), g)
+                    sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
+
+
+
 
 
 
@@ -463,7 +473,7 @@ def train():
                     logger.info('Save the ckpt of {0}'.format(i))
                     if not os.path.exists(ckpt_dir):
                         os.mkdir(ckpt_dir)
-                    saver.save(sess, os.path.join(ckpt_dir, 'C'), global_step = i)
+                    saver.save(sess, os.path.join(ckpt_dir, 'C'), global_step = graph['global_step'])
                 if step % FLAGS.eval_steps == 0:
                     test_images_batch, test_labels_batch = sess.run([test_images1, test_labels1])
 
@@ -499,7 +509,7 @@ def validation():
                   'newcnn' : [o.new_cnn, 64]}
 
     graph = graph_dict[FLAGS.graph][0]()
-    test_feeder = DataIterator(data_dir='./dataset/train/', size=graph_dict[FLAGS.graph][1])
+    test_feeder = DataIterator(data_dir='./dataset/test/', size=graph_dict[FLAGS.graph][1])
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
         test_images, test_labels = test_feeder.input_pipeline(batch_size=FLAGS.batch_size, num_epochs=1)
 
@@ -590,8 +600,7 @@ def binary_pic(name_list):
         temp_image = cv2.imread(image)
         GrayImage=cv2.cvtColor(temp_image,cv2.COLOR_BGR2GRAY)
         ret,thresh1=cv2.threshold(GrayImage,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU)
-        single_name = str(i)
-        newdir = dir +'/'+ single_name+'.jpg'
+        newdir = dir +'/'+ ("%0.5d.png" % i)
         cv2.imwrite(newdir, thresh1)
         list.append(newdir)
         i += 1
@@ -678,7 +687,7 @@ def inference():
     name_list = get_file_list(FLAGS.inferencedir)
 
     #二值化
-    #name_list = binary_pic(name_list)
+    name_list = binary_pic(name_list)
     print(name_list)
 
 
@@ -728,6 +737,7 @@ def inference():
                 p += 1
                 print('should be ',dict_new[outputlist[i]],'      now is ', dict_new[int(predicition[0][0])])
 
+
         print(val_list)
         print('    Accuracy:',1-(p+1)/(i+1))
 
@@ -743,3 +753,4 @@ def main(_):
 
 if __name__ == "__main__":
     tf.app.run()
+    #test()

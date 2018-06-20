@@ -1,0 +1,17 @@
+
+steps=10003
+name=OCR
+ nohup python r.py --graph=$name --optimizer=A --learning_rate=0.01 --max_steps=$steps --batch_size=128  --save_steps=2000 --mode=train &
+
+
+
+name=testing
+steps=20003
+nohup  python r.py --graph=$name --optimizer=A --learning_rate=0.01 --max_steps=$steps --batch_size=64 --save_steps=4000 --mode=train &
+
+
+
+ps -A|grep tensorboard|while read p t u
+do
+kill -9 $p
+done
