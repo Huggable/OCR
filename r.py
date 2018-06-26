@@ -33,7 +33,7 @@ ch.setLevel(logging.INFO)
 logger.addHandler(ch)
 
 
-tf.app.flags.DEFINE_string('graph', 'OCR', 'the graph u wanna run')
+tf.app.flags.DEFINE_string('graph', 'testing', 'the graph u wanna run')
 tf.app.flags.DEFINE_string('optimizer', 'A', 'the optimizer u wanna run')
 tf.app.flags.DEFINE_string('learning_rate', '0.01', 'the optimizer u wanna run')
 tf.app.flags.DEFINE_integer('max_steps', 16003, 'the max training steps ')
@@ -317,24 +317,27 @@ def test(op = FLAGS.optimizer):
         fc1 = slim.fully_connected(flatten, 1024,activation_fn=tf.nn.relu, scope='fc1')
         fc2 = slim.fully_connected(fc1, FLAGS.charset_size, activation_fn=None, scope='fc2')
 
-
+        #tf.summary.image('image',images,max_outputs=1)
         loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=fc2, labels=labels))
         accuracy = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(fc2, 1), labels), tf.float32))
         global_step = tf.get_variable("step", [], initializer=tf.constant_initializer(0.0), trainable=False)
         update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
 
         optimizer = Gradient_dict[op](learning_rate=learn_rate)
+
         gv = optimizer.compute_gradients(loss)
         with tf.control_dependencies(update_ops):
+
             train_op = optimizer.apply_gradients(gv,global_step = global_step)
+
 
 
         for g, v in gv:
             if g is not None:
-                if 'weights' in v.name:
-
+                if 'weights' in v.name and not 'fc' in v.name:
+                    #print(v.name)
                     tf.summary.histogram("{}/grad/hist".format(v.name), g)
-                    #sparsity_summary = tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
+                    tf.summary.scalar("{}/grad/sparsity".format(v.name), tf.nn.zero_fraction(g))
 
 
 
@@ -369,9 +372,9 @@ def train():
                   'newcnn' : [o.new_cnn, 64]}
     graph = graph_dict[FLAGS.graph][0]()
 
-    train_feeder = DataIterator(data_dir='./dataset/train/', size = graph_dict[FLAGS.graph][1])
-    test_feeder1 = DataIterator(data_dir='./dataset/train/', size = graph_dict[FLAGS.graph][1])
-    test_feeder2 = DataIterator(data_dir='./dataset/test/', size=graph_dict[FLAGS.graph][1])
+    train_feeder = DataIterator(data_dir='./5/train/', size = graph_dict[FLAGS.graph][1])
+    test_feeder1 = DataIterator(data_dir='./5/train/', size = graph_dict[FLAGS.graph][1])
+    test_feeder2 = DataIterator(data_dir='./5/test/', size=graph_dict[FLAGS.graph][1])
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, allow_soft_placement=True)) as sess:
 
         train_images, train_labels = train_feeder.input_pipeline(batch_size=FLAGS.batch_size, aug=True)
