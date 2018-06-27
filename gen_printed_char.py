@@ -36,10 +36,10 @@ def args_parse():
                         default=0.2, required=False,
                         help='test dataset size')
     parser.add_argument('--width', dest='width',
-                        default=40, required=False,
+                        default=15, required=False,
                         help='width')
     parser.add_argument('--height', dest='height',
-                        default=40, required=False,
+                        default=15, required=False,
                         help='height')
     parser.add_argument('--no_crop', dest='no_crop',
                         default=False, required=False,
@@ -48,13 +48,13 @@ def args_parse():
                         default=4, required=False,
                         help='', )
     parser.add_argument('--rotate', dest='rotate',
-                        default=2, required=False,
+                        default=10, required=False,
                         help='max rotate degree 0-45')
     parser.add_argument('--rotate_step', dest='rotate_step',
                         default=1, required=False,
                         help='rotate step for the rotate angle')
     parser.add_argument('--need_aug', dest='need_aug',
-                        default=False, required=False,
+                        default=True, required=False,
                         help='need data augmentation', action='store_true')
     args = vars(parser.parse_args())
     return args
